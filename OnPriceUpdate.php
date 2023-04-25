@@ -6,6 +6,8 @@ namespace CalculationPriceSet\Event;
  * обновление цены комплекта (набора)
  */
 
+// 130200.00 цена до изменений
+
 class OnPriceUpdate
 {
     function main($ID, &$arFields)
@@ -64,45 +66,20 @@ class OnPriceUpdate
      */
     function GetPrice(&$arSet)
     {
-
-        $arProduct = [];
-
         // собираем id товаров входящие в комплекты
-        foreach ($arSet as $key => $value) {
-            $arProduct[] = $value['ITEM_ID'];
-
-            foreach ($value['ITEMS'] as $key2 => $value2) {
-                $arProduct[] = $value2['ITEM_ID'];
-            }
-        }
-
-        // ?<--------------------------------------------------------------------------------------------------------------->
-
-        $arProductPrice = [];
-
-        $query = \Bitrix\Catalog\PriceTable::GetList([
-            'select' => ['ID', 'PRODUCT_ID', 'PRICE'],
-            'filter' => [
-                'PRODUCT_ID' => $arProduct,
-            ],
-        ]);
-
-        // получаем цены товаров
-        while ($arFields = $query->Fetch()) {
-            $arProductPrice[$arFields['PRODUCT_ID']] = [
-                'PRICE' => $arFields['PRICE'],
-                'PRICE_ID' => $arFields['ID'],
-            ];
-        }
-
-        // ?<--------------------------------------------------------------------------------------------------------------->
-
-        // добавляем цены к товарам и id цен к комплектам
         foreach ($arSet as $key => &$value) {
-            $value['PRICE_ID'] = $arProductPrice[$value['ITEM_ID']]['PRICE_ID'];
+            // получаем информацию о цене и скидках товара
+            $arPrice = \CCatalogProduct::GetOptimalPrice($value['ITEM_ID'], 1, [], 'N', [], 's2');
+            // id цены комплекта
+            $value['PRICE_ID'] = $arPrice['PRICE']['ID'];
 
             foreach ($value['ITEMS'] as $key2 => &$value2) {
-                $value2['PRICE'] = $arProductPrice[$value2['ITEM_ID']]['PRICE'];
+
+                // получаем информацию о цене и скидках товара
+                $arPrice = \CCatalogProduct::GetOptimalPrice("{$value2['ITEM_ID']}", 1, [], 'N', [], 's2');
+
+                // цена товара с учётом скидки
+                $value2['DISCOUNT_PRICE'] = $arPrice['DISCOUNT_PRICE'];
             }
         }
     }
@@ -112,17 +89,11 @@ class OnPriceUpdate
      */
     function CalculationSetPrice(&$arSet)
     {
-
         foreach ($arSet as $key => &$set) {
             $set['PRICE'] = 0;
 
             foreach ($set['ITEMS'] as $key => &$product) {
-                // если у товара не указана скидка
-                if ($product['DISCOUNT_PERCENT'] != false) {
-                    $product['PRICE'] = + ($product['PRICE'] * (100 - +$product['DISCOUNT_PERCENT'])) / 100;
-                }
-
-                $set['PRICE'] += +$product['QUANTITY'] * +$product['PRICE'];
+                $set['PRICE'] += +$product['QUANTITY'] * +$product['DISCOUNT_PRICE'];
             }
         }
     }
